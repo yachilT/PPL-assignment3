@@ -162,6 +162,15 @@ const flattenInter = (tes: TExp[]): TExp[] =>
 
 // ----------------------------------------makeDiff-----------------------------------------------
 export const makeDiff = (te1: TExp, te2: TExp): TExp =>
+    isAnyTExp(te1) && isAnyTExp(te2) ? makeNeverTExp() : 
+    isAnyTExp(te1) ? te1 : 
+    isSubType(te1, te2) ? makeNeverTExp() :
+    isUnionTExp(te1) ? makeUnionTExp(map((te: TExp) => makeDiff(te, te2), te1.components)) :
+    isInterTExp(te1) ? makeInterTExp(map((te: TExp) => makeDiff(te, te2), te1.components)) :
+    te1;
+// --------------------------------------------------------------------------------------------
+// ----------------------------------------makeDiffTExp------------------------------------------
+export const makeDiffTExp = (te1: TExp, te2: TExp): TExp =>
     isSubType(te1, te2) ? makeNeverTExp() :
     isUnionTExp(te1) ? makeUnionTExp(map((te: TExp) => makeDiff(te, te2), te1.components)) :
     isInterTExp(te1) ? makeInterTExp(map((te: TExp) => makeDiff(te, te2), te1.components)) :
@@ -271,6 +280,7 @@ export const isSubType = (te1: TExp, te2: TExp): boolean =>
     (isProcTExp(te1) && isProcTExp(te2)) ? checkProcTExps(te1, te2) :
     isTVar(te1) ? equals(te1, te2) :
     isAtomicTExp(te1) ? equals(te1, te2) :
+    isNeverTExp(te1) || isAnyTExp(te2) ? true :
     false;
 
 // ------------------------allContainsType-------------------------------
@@ -434,7 +444,7 @@ export const unparseTExp = (te: TExp): Result<string> => {
         `(union ${tes[0]} ${parenthesizeUnion(tes.slice(1))})`
 
     const parenthesizeInter = (tes: string[]): string =>
-        (tes.length == 1) ? tes[0] :  // (union T) -> T
+        (tes.length == 1) ? tes[0] :  // (Inter T) -> T
         `(inter ${tes[0]} ${parenthesizeInter(tes.slice(1))})`
 
     const up = (x?: TExp): Result<string | string[]> =>
