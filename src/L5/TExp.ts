@@ -52,9 +52,9 @@ export const isAtomicTExp = (x: any): x is AtomicTExp =>
 export type CompoundTExp = ProcTExp | TupleTExp | UnionTExp | InterTExp;
 export const isCompoundTExp = (x: any): x is CompoundTExp => isProcTExp(x) || isTupleTExp(x) || isUnionTExp(x) || isInterTExp(x); // changed
 
-export type NonTupleTExp = AtomicTExp | ProcTExp | TVar | UnionTExp;
+export type NonTupleTExp = AtomicTExp | ProcTExp | TVar | UnionTExp | InterTExp;
 export const isNonTupleTExp = (x: any): x is NonTupleTExp =>
-    isAtomicTExp(x) || isProcTExp(x) || isTVar(x) || isUnionTExp(x);
+    isAtomicTExp(x) || isProcTExp(x) || isTVar(x) || isUnionTExp(x) || isInterTExp(x);
 
 export type NumTExp = { tag: "NumTExp" };
 export const makeNumTExp = (): NumTExp => ({tag: "NumTExp"});
@@ -273,14 +273,15 @@ export const crossProduct = (ll1: TExp[][], ll2: TExp[][]): TExp[][] =>
 
 // SubType comparator  
 export const isSubType = (te1: TExp, te2: TExp): boolean =>
+    isNeverTExp(te1) ? true :
+    isAnyTExp(te2) ? true :
     (isUnionTExp(te1) && isUnionTExp(te2)) ? isSubset(te1.components, te2.components) :
     isUnionTExp(te2) ? containsType(te2.components, te1) :
     (isInterTExp(te1) && isInterTExp(te2)) ? isSubset(te1.components, te2.components): // changed
     isInterTExp(te2) ? allContainsType(te2.components, te1) :
     (isProcTExp(te1) && isProcTExp(te2)) ? checkProcTExps(te1, te2) :
     isTVar(te1) ? equals(te1, te2) :
-    isAtomicTExp(te1) ? equals(te1, te2) :
-    isNeverTExp(te1) || isAnyTExp(te2) ? true :
+    isAtomicTExp(te1) ? te1.tag === te2.tag:
     false;
 
 // ------------------------allContainsType-------------------------------
