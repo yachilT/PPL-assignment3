@@ -151,7 +151,6 @@ const isTypePredApp = (e: Exp, tenv: TEnv): Result<TEnv[]> => {
     const rand = e.rands[0];
     if (!isVarRef(rand))
         return makeFailure(`operand isn't varRef`);
-    console.log(typeofApp(e, tenv))
     return bind(typeofApp(e, tenv),(te: TExp) => 
                 bind(typeofExp(rand, tenv), (ratorTE: TExp) =>
                     isTypePredTExp(te) ? (makeOk([makeExtendTEnv([rand.var], [te.type], tenv),

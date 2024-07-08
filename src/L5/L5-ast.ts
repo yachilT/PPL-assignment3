@@ -256,6 +256,7 @@ const parseProcExp = (vars: Sexp, rest: Sexp[]): Result<ProcExp> => {
         const bodyPos = rest[0] != ":" ? 0 : rest[1] != "is?" ? 2 : 3;
         const returnTE = bodyPos == 0 ? makeOk(makeFreshTVar()) :
                         bodyPos == 2 ? parseTExp(rest[1]) : parseTExp(rest.slice(1, bodyPos));
+        
         const body = mapResult(parseL5CExp, rest.slice(bodyPos)); // need to check for fixing
         return bind(args, (args: VarDecl[]) =>
                     bind(body, (body: CExp[]) =>

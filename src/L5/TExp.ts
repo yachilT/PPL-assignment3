@@ -372,8 +372,8 @@ export const parseTE = (t: string): Result<TExp> =>
 ;; parseTExp('(T * T -> boolean)') => '(proc-te ((tvar T) (tvar T)) bool-te)
 ;; parseTExp('(number -> (number -> number)') => '(proc-te (num-te) (proc-te (num-te) num-te))
 */
-export const parseTExp = (texp: Sexp): Result<TExp> =>
-    (texp === "number") ? makeOk(makeNumTExp()) :
+export const parseTExp = (texp: Sexp): Result<TExp> => {
+    return (texp === "number") ? makeOk(makeNumTExp()) :
     (texp === "boolean") ? makeOk(makeBoolTExp()) :
     (texp === "void") ? makeOk(makeVoidTExp()) :
     (texp === "string") ? makeOk(makeStrTExp()) :
@@ -382,6 +382,7 @@ export const parseTExp = (texp: Sexp): Result<TExp> =>
     isString(texp) ? makeOk(makeTVar(texp)) :
     isArray(texp) ? parseCompoundTExp(texp) :
     makeFailure(`Unexpected TExp - ${format(texp)}`);
+}
 
 const parseCompoundTExp = (texps: Sexp[]): Result<TExp> =>
     (texps[0] === "union") ? parseUnionTExp(texps) :
@@ -415,7 +416,7 @@ const parseProcTExp = (texps: Sexp[]): Result<ProcTExp> => {
            (pos === texps.length - 1) ? makeFailure(`No return type in proc texp - ${format(texps)}`) :
            (texps.slice(pos + 1).indexOf('->') > -1) ? makeFailure(`Only one -> allowed in a procexp - ${format(texps)}`) :
            bind(parseTupleTExp(texps.slice(0, pos)), (args: TExp[]) =>
-               mapv(parseTExp(texps[pos + 1]), (returnTE: TExp) =>
+               mapv(parseTExp(pos + 2 === texps.length ? texps[pos + 1] : texps.slice(pos + 1)), (returnTE: TExp) =>
                     makeProcTExp(args, returnTE)));
 };
     
