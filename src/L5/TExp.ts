@@ -49,8 +49,8 @@ export type AtomicTExp = NumTExp | BoolTExp | StrTExp | VoidTExp | NeverTExp | A
 export const isAtomicTExp = (x: any): x is AtomicTExp =>
     isNumTExp(x) || isBoolTExp(x) || isStrTExp(x) || isVoidTExp(x) || isAnyTExp(x) || isNeverTExp(x); // changed
 
-export type CompoundTExp = ProcTExp | TupleTExp | UnionTExp | InterTExp;
-export const isCompoundTExp = (x: any): x is CompoundTExp => isProcTExp(x) || isTupleTExp(x) || isUnionTExp(x) || isInterTExp(x); // changed
+export type CompoundTExp = ProcTExp | TupleTExp | UnionTExp | InterTExp | TypePredTExp;
+export const isCompoundTExp = (x: any): x is CompoundTExp => isProcTExp(x) || isTupleTExp(x) || isUnionTExp(x) || isInterTExp(x) || isTypePredTExp(x); // changed
 
 export type NonTupleTExp = AtomicTExp | ProcTExp | TVar | UnionTExp | InterTExp;
 export const isNonTupleTExp = (x: any): x is NonTupleTExp =>
@@ -91,6 +91,15 @@ export const isProcTExp = (x: any): x is ProcTExp => x.tag === "ProcTExp";
 // Uniform access to all components of a ProcTExp
 export const procTExpComponents = (pt: ProcTExp): TExp[] =>
     [...pt.paramTEs, pt.returnTE];
+
+// ---------------------------TypePredTExp--------------------------------
+export type TypePredTExp = {tag: "TypePredTExp"; type: TExp};
+export const makeTypePredTExp = (type: TExp) : TypePredTExp =>
+    ({tag: "TypePredTExp", type: type})
+export const isTypePredTExp = (x: any): x is TypePredTExp =>
+    x.tag === "TypePredTExp"
+// -----------------------------------------------------------------------
+
 
 export type TupleTExp = NonEmptyTupleTExp | EmptyTupleTExp;
 export const isTupleTExp = (x: any): x is TupleTExp =>
@@ -143,7 +152,7 @@ export const makeInterTExp = (tes: TExp[]): TExp =>
 export const isInterTExp = (x: any): x is InterTExp => x.tag === "InterTExp";
 
 const flattenSortInter = (tes: TExp[]): TExp[] =>
-    removeDuplicatesAndAny(sort(subTypeComparator, flattenInter(tes)));
+    removeDuplicatesAndAny(sort(superTypeComparator, flattenInter(tes)));
 
 const normalizeInter = (intr: InterTExp): TExp =>
     isEmpty(intr.components) ? makeNeverTExp() : 
@@ -160,20 +169,11 @@ const flattenInter = (tes: TExp[]): TExp[] =>
 
 // --------------------------------------------------------------------------------------------
 
-// ----------------------------------------makeDiff-----------------------------------------------
-export const makeDiff = (te1: TExp, te2: TExp): TExp =>
-    isAnyTExp(te1) && isAnyTExp(te2) ? makeNeverTExp() : 
-    isAnyTExp(te1) ? te1 : 
-    isSubType(te1, te2) ? makeNeverTExp() :
-    isUnionTExp(te1) ? makeUnionTExp(map((te: TExp) => makeDiff(te, te2), te1.components)) :
-    isInterTExp(te1) ? makeInterTExp(map((te: TExp) => makeDiff(te, te2), te1.components)) :
-    te1;
-// --------------------------------------------------------------------------------------------
 // ----------------------------------------makeDiffTExp------------------------------------------
 export const makeDiffTExp = (te1: TExp, te2: TExp): TExp =>
     isSubType(te1, te2) ? makeNeverTExp() :
-    isUnionTExp(te1) ? makeUnionTExp(map((te: TExp) => makeDiff(te, te2), te1.components)) :
-    isInterTExp(te1) ? makeInterTExp(map((te: TExp) => makeDiff(te, te2), te1.components)) :
+    isUnionTExp(te1) ? makeUnionTExp(map((te: TExp) => makeDiffTExp(te, te2), te1.components)) :
+    isInterTExp(te1) ? makeInterTExp(map((te: TExp) => makeDiffTExp(te, te2), te1.components)) :
     te1;
 // --------------------------------------------------------------------------------------------
 
@@ -213,7 +213,7 @@ const removeDuplicatesAndNever = (tes: TExp[]): TExp[] =>
 const removeDuplicatesAndAny = (tes: TExp[]): TExp[] =>
     isEmpty(tes) ? tes :
     containsType(tes.slice(1), tes[0]) ? removeDuplicatesAndAny(tes.slice(1)) :
-    isAnyTExp(tes[0]) ? removeDuplicatesAndNever(tes.slice(1)) :
+    isAnyTExp(tes[0]) ? removeDuplicatesAndAny(tes.slice(1)) :
     [tes[0], ...removeDuplicatesAndAny(tes.slice(1))];
 
 // ------------------------------------------------------------------------
@@ -275,6 +275,7 @@ export const crossProduct = (ll1: TExp[][], ll2: TExp[][]): TExp[][] =>
 export const isSubType = (te1: TExp, te2: TExp): boolean =>
     isNeverTExp(te1) ? true :
     isAnyTExp(te2) ? true :
+    isAnyTExp(te1) && isTVar(te2) ? true :
     (isUnionTExp(te1) && isUnionTExp(te2)) ? isSubset(te1.components, te2.components) :
     isUnionTExp(te2) ? containsType(te2.components, te1) :
     (isInterTExp(te1) && isInterTExp(te2)) ? isSubset(te1.components, te2.components): // changed
@@ -385,6 +386,7 @@ export const parseTExp = (texp: Sexp): Result<TExp> =>
 const parseCompoundTExp = (texps: Sexp[]): Result<TExp> =>
     (texps[0] === "union") ? parseUnionTExp(texps) :
     (texps[0] === "inter") ? parseInterTExp(texps) :
+    (texps[0] === "is?") ? parseTypePredTExp(texps) :
     parseProcTExp(texps);
 
 // Expect (union texp1 ...)
@@ -396,6 +398,11 @@ const parseUnionTExp = (texps: Sexp[]): Result<TExp> =>
 const parseInterTExp = (texps: Sexp[]): Result<TExp> =>
     mapv(mapResult(parseTExp, texps.slice(1)),
          (tes: TExp[]) => dnf(makeInterTExp(tes)));
+
+const parseTypePredTExp = (texps: Sexp[]): Result<TExp> =>
+    texps.length != 2 ? makeFailure(`is? can accept only one type`) :
+    mapv(parseTExp(texps[1]), (type: TExp) => makeTypePredTExp(type))
+
 /*
 ;; expected structure: (<params> -> <returnte>)
 ;; expected exactly one -> in the list
@@ -411,6 +418,8 @@ const parseProcTExp = (texps: Sexp[]): Result<ProcTExp> => {
                mapv(parseTExp(texps[pos + 1]), (returnTE: TExp) =>
                     makeProcTExp(args, returnTE)));
 };
+    
+
 
 /*
 ;; Expected structure: <te1> [* <te2> ... * <ten>]?
@@ -464,6 +473,7 @@ export const unparseTExp = (te: TExp): Result<string> => {
         isProcTExp(x) ? bind(unparseTuple(x.paramTEs), (paramTEs: string[]) =>
                             mapv(unparseTExp(x.returnTE), (returnTE: string) =>
                                 [...paramTEs, '->', returnTE])) :
+        isTypePredTExp(x) ? mapv(unparseTExp(x.type), (type : string) => 'is?' + type) :
         isEmptyTupleTExp(x) ? makeOk("Empty") :
         isNonEmptyTupleTExp(x) ? unparseTuple(x.TEs) :
         x === undefined ? makeFailure("Undefined TVar") :

@@ -250,11 +250,13 @@ const parseIfExp = (params: Sexp[]): Result<IfExp> =>
         makeIfExp(cexps[0], cexps[1], cexps[2]));
 
 // (lambda (<vardecl>*) [: returnTE]? <CExp>+)
-const parseProcExp = (vars: Sexp, rest: Sexp[]): Result<ProcExp> => {
+const parseProcExp = (vars: Sexp, rest: Sexp[]): Result<ProcExp> => { 
     if (isArray(vars)) {
         const args = mapResult(parseVarDecl, vars);
-        const body = mapResult(parseL5CExp, rest[0] === ":" ? rest.slice(2) : rest);
-        const returnTE = rest[0] === ":" ? parseTExp(rest[1]) : makeOk(makeFreshTVar());
+        const bodyPos = rest[0] != ":" ? 0 : rest[1] != "is?" ? 2 : 3;
+        const returnTE = bodyPos == 0 ? makeOk(makeFreshTVar()) :
+                        bodyPos == 2 ? parseTExp(rest[1]) : parseTExp(rest.slice(1, bodyPos));
+        const body = mapResult(parseL5CExp, rest.slice(bodyPos)); // need to check for fixing
         return bind(args, (args: VarDecl[]) =>
                     bind(body, (body: CExp[]) =>
                         mapv(returnTE, (returnTE: TExp) =>
